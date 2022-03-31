@@ -1,0 +1,27 @@
+version: '3.3'
+services:
+  mqtt:
+    image: eclipse-mosquitto
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:rw
+    ports:
+      - 1883:1883
+      - 9001:9001
+  deepstream:
+    build:
+        context: ./deepstream
+        dockerfile: Dockerfile
+    deploy:
+        resources:
+            reservations:
+                devices:
+                - capabilities: [gpu]
+    environment:
+        - DISPLAY
+    env_file:
+        - deepstream.env
+    volumes:
+        #Atom config
+        - "/tmp/.X11-unix:/tmp/.X11-unix"
+    depends_on:
+        - mqtt
