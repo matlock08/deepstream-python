@@ -1,7 +1,5 @@
 FROM nvcr.io/nvidia/deepstream:6.0.1-devel
 
-# WORKDIR /opt/deepstream
-
 # #RUN apt-get -y update
 RUN apt-get -y install \
 libssl1.0.0 \
@@ -35,14 +33,10 @@ WORKDIR /opt/nvidia/deepstream/deepstream/sources
 
 RUN git clone https://github.com/NVIDIA-AI-IOT/deepstream_python_apps
 
-RUN apt-get install -y librdkafka1=0.11.3-1build1
-RUN pip3 install kafka-python
+RUN pip3 install paho-mqtt
 
 ADD apps /opt/nvidia/deepstream/deepstream/sources/python/apps
 
-WORKDIR /opt/nvidia/deepstream/deepstream/sources/python/apps/deepstream/
+WORKDIR /opt/nvidia/deepstream/deepstream/sources/python/apps
 
-#CMD ["bash"]
-#ENTRYPOINT python3 deepstream_test_3.py "$STREAM0" "$STREAM1"
-#ENTRYPOINT python3 deepstream_test_1.py ../../../../samples/streams/sample_720p.h264
-ENTRYPOINT GST_DEBUG=3 python3 deepstream_kafka.py "$STREAM0" "$STREAM1" 
+ENTRYPOINT ./wait-for-it.sh mqtt:1883 -- python3 -u ds_mqtt.py 

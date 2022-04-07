@@ -7,6 +7,8 @@ services:
     ports:
       - 1883:1883
       - 9001:9001
+    networks:
+      - default
   deepstream:
     build:
         context: ./deepstream
@@ -16,12 +18,15 @@ services:
             reservations:
                 devices:
                 - capabilities: [gpu]
+    networks:
+      - default
     environment:
-        - DISPLAY
+      - DISPLAY
     env_file:
-        - deepstream.env
+      - deepstream.env
     volumes:
-        #Atom config
-        - "/tmp/.X11-unix:/tmp/.X11-unix"
+      - "/tmp/.X11-unix:/tmp/.X11-unix"
     depends_on:
-        - mqtt
+      - mqtt
+networks:
+  default:
