@@ -34,6 +34,7 @@ WORKDIR /opt/nvidia/deepstream/deepstream/sources
 RUN git clone https://github.com/NVIDIA-AI-IOT/deepstream_python_apps
 
 RUN pip3 install paho-mqtt
+RUN apt install -y python3-numpy python3-opencv 
 
 ADD apps /opt/nvidia/deepstream/deepstream/sources/python/apps
 

@@ -1,10 +1,10 @@
 """Pipeline Builder it creates a gstreammer pipeline based on nvidia deepstream 6.
     
-    #                             l-- queue -- valve --nvinfer --| 
-    #                             l                              |
-    #camera srcs -- streammux -- tee                           funnel -- nvmultistreamtiler -- queue -- nvvideoconvert --queue -- nvosd -- queue -- nveglglessink
-    #                             l                              |
-    #                             l-- queue -- valve ------------|
+                                 l-- queue -- valve --nvinfer --| 
+                                 l                              |
+    camera srcs -- streammux -- tee                           funnel -- nvmultistreamtiler -- queue -- nvvideoconvert --queue -- nvosd -- queue -- nveglglessink
+                                 l                              |
+                                 l-- queue -- valve ------------|
 
     ...
 
@@ -45,7 +45,7 @@ class PipelineBuilder:
             TILED_OUTPUT_HEIGHT: int - Tiled heaight (default: 720)
             PGIE_CONFIG_FILE: str - Configuration file for pgie (default dstest_pgie_config.txt)
         """
-        self.inferenceEnabled = False
+        self.inferenceEnabled = True
         self.PGIE_CONFIG_FILE = PGIE_CONFIG_FILE
         self.TILED_OUTPUT_WIDTH = TILED_OUTPUT_WIDTH
         self.TILED_OUTPUT_HEIGHT = TILED_OUTPUT_HEIGHT
@@ -54,7 +54,7 @@ class PipelineBuilder:
         self.sources = sources
         
 
-    def build(self):
+    def build(self, displaySync : bool = True, probeCallback : any = None):
         """
         Creates the pipeline elements from the sources
         Returns:
@@ -67,7 +67,7 @@ class PipelineBuilder:
 
         pipeline, pgie, valveNotInfer = self.build_pipeline_flows(pipeline, streammux)
 
-        pipeline = self.build_pipeline_sync(pipeline, pgie, valveNotInfer)
+        pipeline = self.build_pipeline_sync(pipeline, displaySync, pgie, valveNotInfer, probeCallback)
 
         logger.info("Builded Pipeline...")
         return pipeline
@@ -171,7 +171,7 @@ class PipelineBuilder:
         if not valveInfer:
             raise Exception("Unable to create valveInfer")
 
-        valveInfer.set_property("drop", self.inferenceEnabled)
+        valveInfer.set_property("drop", not self.inferenceEnabled)
 
 
         logger.debug("Creating valveNotInfer")
@@ -179,7 +179,7 @@ class PipelineBuilder:
         if not valveNotInfer:
             raise Exception("Unable to create valveNotInfer")
 
-        valveNotInfer.set_property("drop", not self.inferenceEnabled )
+        valveNotInfer.set_property("drop", self.inferenceEnabled )
         
 
         logger.debug("Adding elements to Pipeline")
@@ -205,7 +205,7 @@ class PipelineBuilder:
         return pipeline, pgie, valveNotInfer
 
 
-    def build_pipeline_sync(self, pipeline, endFlow1, endFlow2 ):
+    def build_pipeline_sync(self, pipeline, displaySync,  endFlow1, endFlow2, probeCallback ):
         """
         Attach to the pipeline sync elements form the 2 flows
         Arguments:
@@ -239,7 +239,24 @@ class PipelineBuilder:
         nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "convertor")
         if not nvvidconv:
             raise Exception("Unable to create nvvideoconvert")
+
+        logger.debug("Creating nvvideoconvert2")
+        nvvidconv2 = Gst.ElementFactory.make("nvvideoconvert", "convertor2")
+        if not nvvidconv2:
+            raise Exception("Unable to create nvvidconv2")
             
+        logger.debug("Creating caps")
+        caps1 = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=RGBA")
+        if not caps1:
+            raise Exception("Unable to create caps1")
+
+        logger.debug("Creating capsfilter")
+        filter1 = Gst.ElementFactory.make("capsfilter", "filter1")
+        if not filter1:
+            raise Exception("Unable to create capsfilter")
+
+        filter1.set_property("caps", caps1)
+
 
         logger.debug("Creating nvosd")
         nvosd = Gst.ElementFactory.make("nvdsosd", "onscreendisplay")
@@ -250,12 +267,17 @@ class PipelineBuilder:
         nvosd.set_property('display-text', self.OSD_DISPLAY_TEXT)
 
         logger.debug("Creating nveglglessink")
-        sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+        if displaySync:
+            sink = Gst.ElementFactory.make("nveglglessink", "nvvideo-renderer")
+        else:
+            sink = Gst.ElementFactory.make("fakesink", "nvvideo-renderer")
+
         if not sink:
             raise Exception("Unable to create nveglglessink")
             
-        sink.set_property("sync",0)
-        sink.set_property("qos",0)
+        if displaySync:
+            sink.set_property("sync",0)
+            sink.set_property("qos",0)
 
 
         queueTiler = Gst.ElementFactory.make("queue","queueTiler")
@@ -263,10 +285,12 @@ class PipelineBuilder:
         queueOSD = Gst.ElementFactory.make("queue","queueOSD")
         
         logger.debug("Adding elements to Pipeline")
-        pipeline.add(funnel)        
+        pipeline.add(funnel)  
+        pipeline.add(nvvidconv2)     
+        pipeline.add(filter1)
         pipeline.add(tiler)
         pipeline.add(queueTiler)
-        pipeline.add(nvvidconv)
+        pipeline.add(nvvidconv)        
         pipeline.add(queueConverter)
         pipeline.add(nvosd)
         pipeline.add(queueOSD)
@@ -276,17 +300,27 @@ class PipelineBuilder:
         logger.debug("Linking elements of Pipeline")
         endFlow1.link(funnel)
         endFlow2.link(funnel)
-        funnel.link(tiler)
+        funnel.link(nvvidconv2)
+        nvvidconv2.link(filter1)
+        filter1.link(tiler)        
         tiler.link(queueTiler)
         queueTiler.link(nvvidconv)
         nvvidconv.link(queueConverter)
         queueConverter.link(nvosd)
         nvosd.link(queueOSD)
         queueOSD.link(sink) 
+
+        if probeCallback:
+            # Add Probe to get access to image from the pipeline
+            tiler_sink_pad = tiler.get_static_pad("sink")
+            if not tiler_sink_pad:
+                raise Exception("Unable to get tiler_sink_pad src pad")
+            else:
+                tiler_sink_pad.add_probe(Gst.PadProbeType.BUFFER, probeCallback, 0)
         
         return pipeline
 
-    def cb_newpad(self, decodebin, decoder_src_pad,data):
+    def cb_newpad(self, decodebin, decoder_src_pad, data):
         """
         Callback called when a new pad is created on the decoder sink pad.
         Arguments:
@@ -374,3 +408,5 @@ class PipelineBuilder:
             return None
             
         return nbin
+
+    
