@@ -3,13 +3,13 @@ gi.require_version('Gst', '1.0')
 from gi.repository import GObject, Gst
 import logging
 import pyds
+import json
 
 logger = logging.getLogger('ds')
 
 
 def tiler_sink_pad_buffer_probe(pad, info, u_data):
     frame_number=0
-    num_rects=0
     gst_buffer = info.get_buffer()
     if not gst_buffer:
         logger.error("Unable to get GstBuffer ")
@@ -20,6 +20,9 @@ def tiler_sink_pad_buffer_probe(pad, info, u_data):
     # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
     l_frame = batch_meta.frame_meta_list
+
+    objects_classes_msg = []
+
     while l_frame is not None:
         try:
             # Note that l_frame.data needs a cast to pyds.NvDsFrameMeta
@@ -33,7 +36,6 @@ def tiler_sink_pad_buffer_probe(pad, info, u_data):
 
         frame_number = frame_meta.frame_num
         l_obj = frame_meta.obj_meta_list
-        num_rects = frame_meta.num_obj_meta
         
         
         while l_obj is not None:
@@ -43,10 +45,10 @@ def tiler_sink_pad_buffer_probe(pad, info, u_data):
             except StopIteration:
                 break
             
-            logger.info( "Frame: %d class_id: %d label: %s ",frame_number, obj_meta.class_id, obj_meta.obj_label )
+            logger.debug( "Frame: %d class_id: %d label: %s trackid: %d ",frame_number, obj_meta.class_id, obj_meta.obj_label, obj_meta.object_id )
 
             c_list = obj_meta.classifier_meta_list # Second GIE
-
+            attributes_msg = []
             # This will only be available if secondary GIE was run
             while c_list is not None:
                 try: 
@@ -58,20 +60,19 @@ def tiler_sink_pad_buffer_probe(pad, info, u_data):
                         try:
                             # Casting class_meta.label_info_list.data to pyds.NvDsLabelInfo
                             label_info=pyds.NvDsLabelInfo.cast(label_meta_list.data)
-                            logger.info( "                            label_id: %d", label_info.label_id )
-                            logger.info( "                            num_classes: %d", label_info.num_classes )
-                            logger.info( "                            result_label: %s", label_info.result_label )
-                            logger.info( "                            result_prob: %f", label_info.result_prob )
+
+                            attributes_msg.append( { "label_id": label_info.label_id, "result_label": label_info.result_label, "result_prob": label_info.result_prob } )
                         except StopIteration:
                             break
-                        class_meta.label_info_list = class_meta.label_info_list.next
-
+                        
                         label_meta_list = label_meta_list.next
 
 
                     c_list=c_list.next
                 except StopIteration:
                     break
+
+            objects_classes_msg.append ( { "object_id": obj_meta.object_id, "class_id": obj_meta.class_id, "label": obj_meta.obj_label, "confidence": obj_meta.confidence, "frame_number": frame_number, "attributes": attributes_msg } )
 
             try: 
                 l_obj=l_obj.next
@@ -83,5 +84,11 @@ def tiler_sink_pad_buffer_probe(pad, info, u_data):
             l_frame=l_frame.next
         except StopIteration:
             break
+
+    # All the Frames, containing, all their objects , all their attributes
+    if frame_number % 30 == 0:
+        logger.info( json.dumps(objects_classes_msg) )
+        
+    # TODO Send through mqtt
 
     return Gst.PadProbeReturn.OK
