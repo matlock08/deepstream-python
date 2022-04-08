@@ -1,10 +1,11 @@
 """Pipeline Builder it creates a gstreammer pipeline based on nvidia deepstream 6.
     
-                                 l-- queue -- valve --nvinfer --| 
-                                 l                              |
-    camera srcs -- streammux -- tee                           funnel -- nvvideoconvert -- capsfilter -- nvmultistreamtiler -- nvvideoconvert -- nvosd -- nveglglessink
-                                 l                              |
-                                 l-- queue -- valve ------------|
+
+                       ┌ queue - valve - nvinfer - nvtracker - nvinfer - nvinfer -nvinfer ┐ 
+                       |                                                                  |
+    src - streammux - tee                                                               funnel - nvvideoconvert - capsfilter - nvmultistreamtiler - nvvideoconvert - nvosd - nveglglessink
+                       |                                                                  |
+                       └ queue - valve ---------------------------------------------------┘
 
     ...
 
@@ -32,6 +33,7 @@ from gi.repository import GObject, Gst
 import math
 import logging
 import pyds
+import configparser
 
 logger = logging.getLogger('ds')
 
@@ -48,6 +50,10 @@ class PipelineBuilder:
         """
         self.inferenceEnabled = True
         self.PGIE_CONFIG_FILE = PGIE_CONFIG_FILE
+        self.TRACKER_CONFIG = "dstest_tracker_config.txt"
+        self.SGIE1_CONFIG_FILE = "dstest_sgie1_config.txt"
+        self.SGIE2_CONFIG_FILE = "dstest_sgie2_config.txt"
+        self.SGIE3_CONFIG_FILE = "dstest_sgie3_config.txt"
         self.TILED_OUTPUT_WIDTH = TILED_OUTPUT_WIDTH
         self.TILED_OUTPUT_HEIGHT = TILED_OUTPUT_HEIGHT
         self.OSD_PROCESS_MODE = 0
@@ -161,8 +167,58 @@ class PipelineBuilder:
         pgie = Gst.ElementFactory.make("nvinfer", "primary-inference")
         if not pgie:
             raise Exception("Unable to create pgie")
-
         pgie.set_property('config-file-path', self.PGIE_CONFIG_FILE)
+
+        logger.debug("Creating tracker")
+        tracker = Gst.ElementFactory.make("nvtracker", "tracker")
+        if not tracker:
+            raise Exception(" Unable to create tracker")
+
+        #Set properties of tracker
+        config = configparser.ConfigParser()
+        config.read(self.TRACKER_CONFIG)
+        config.sections()
+
+        for key in config['tracker']:
+            if key == 'tracker-width' :
+                tracker_width = config.getint('tracker', key)
+                tracker.set_property('tracker-width', tracker_width)
+            if key == 'tracker-height' :
+                tracker_height = config.getint('tracker', key)
+                tracker.set_property('tracker-height', tracker_height)
+            if key == 'gpu-id' :
+                tracker_gpu_id = config.getint('tracker', key)
+                tracker.set_property('gpu_id', tracker_gpu_id)
+            if key == 'll-lib-file' :
+                tracker_ll_lib_file = config.get('tracker', key)
+                tracker.set_property('ll-lib-file', tracker_ll_lib_file)
+            if key == 'll-config-file' :
+                tracker_ll_config_file = config.get('tracker', key)
+                tracker.set_property('ll-config-file', tracker_ll_config_file)
+            if key == 'enable-batch-process' :
+                tracker_enable_batch_process = config.getint('tracker', key)
+                tracker.set_property('enable_batch_process', tracker_enable_batch_process)
+            if key == 'enable-past-frame' :
+                tracker_enable_past_frame = config.getint('tracker', key)
+                tracker.set_property('enable_past_frame', tracker_enable_past_frame)
+
+        logger.debug("Creating Sgie1")
+        sgie1 = Gst.ElementFactory.make("nvinfer", "secondary1-nvinference-engine")
+        if not sgie1:
+            raise Exception("Unable to make sgie1")
+        sgie1.set_property('config-file-path', self.SGIE1_CONFIG_FILE )
+    
+        logger.debug("Creating Sgie2")
+        sgie2 = Gst.ElementFactory.make("nvinfer", "secondary2-nvinference-engine")
+        if not sgie2:
+            raise Exception("Unable to make sgie2")
+        sgie2.set_property('config-file-path', self.SGIE2_CONFIG_FILE)
+    
+        logger.debug("Creating Sgie3")
+        sgie3 = Gst.ElementFactory.make("nvinfer", "secondary3-nvinference-engine")
+        if not sgie3:
+            raise Exception("Unable to make sgie3")
+        sgie3.set_property('config-file-path', self.SGIE3_CONFIG_FILE)
 
         logger.debug("Creating queueWithoutInference")
         queueWithoutInference = Gst.ElementFactory.make("queue","queueWithoutInference")
@@ -190,6 +246,11 @@ class PipelineBuilder:
         pipeline.add(queueInference)        
         pipeline.add(valveInfer)
         pipeline.add(pgie)
+        pipeline.add(tracker)
+        pipeline.add(sgie1)
+        pipeline.add(sgie2)
+        pipeline.add(sgie3)
+
 
         pipeline.add(queueWithoutInference)
         pipeline.add(valveNotInfer)
@@ -202,10 +263,14 @@ class PipelineBuilder:
 
         queueInference.link(valveInfer)
         valveInfer.link(pgie)
+        pgie.link(tracker)
+        tracker.link(sgie1)
+        sgie1.link(sgie2)
+        sgie2.link(sgie3)
 
         queueWithoutInference.link(valveNotInfer)
         
-        return pipeline, pgie, valveNotInfer
+        return pipeline, sgie3, valveNotInfer
 
 
     def build_pipeline_sync(self, pipeline, displaySync,  endFlow1, endFlow2, probeCallback ):

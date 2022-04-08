@@ -47,13 +47,28 @@ def tiler_sink_pad_buffer_probe(pad, info, u_data):
 
             c_list = obj_meta.classifier_meta_list # Second GIE
 
-            # This will only be available is secondary GIE was run
+            # This will only be available if secondary GIE was run
             while c_list is not None:
                 try: 
                     # Casting c_list.data to pyds.NvDsClassifierMeta
                     class_meta=pyds.NvDsClassifierMeta.cast(c_list.data)
-                    print(class_meta.label_info_list)
-                    logger.info( "frame: %d label: %s class: %s",frame_number, obj_meta.obj_label, class_meta.label_info_list )
+                    label_meta_list = class_meta.label_info_list
+
+                    while label_meta_list is not None:
+                        try:
+                            # Casting class_meta.label_info_list.data to pyds.NvDsLabelInfo
+                            label_info=pyds.NvDsLabelInfo.cast(label_meta_list.data)
+                            logger.info( "                            label_id: %d", label_info.label_id )
+                            logger.info( "                            num_classes: %d", label_info.num_classes )
+                            logger.info( "                            result_label: %s", label_info.result_label )
+                            logger.info( "                            result_prob: %f", label_info.result_prob )
+                        except StopIteration:
+                            break
+                        class_meta.label_info_list = class_meta.label_info_list.next
+
+                        label_meta_list = label_meta_list.next
+
+
                     c_list=c_list.next
                 except StopIteration:
                     break

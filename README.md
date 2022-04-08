@@ -1,16 +1,18 @@
 # Deepstream 6.0.1 with Python on Docker Compose
 
-This project uses deepstream 6.0.1 running on a docker compose with mqtt from mosquitto
-the projcet is develop in python and reads messages from mqqt to pause, play or stop 
-the pipeline as well as to send images from pipeline or messages
+This project uses deepstream 6.0.1 running on a docker compose environment with mqtt from mosquitto
+the project is developed in python and reads messages from mqtt to pause, play or stop 
+the pipeline as well as to disable or enable inference.
+
+Also support to add probe callback to get access to images in pipeline or to send messages
 
 
 
-                       ┌ queue - valve - nvinfer ┐ 
-                       |                         |
-    src - streammux - tee                      funnel - nvvideoconvert - capsfilter - nvmultistreamtiler - nvvideoconvert - nvosd - nveglglessink
-                       |                         |
-                       └ queue - valve ----------┘
+                       ┌ queue - valve - nvinfer -nvtracker - nvinfer - nvinfer -nvinfer ┐ 
+                       |                                                                 |
+    src - streammux - tee                                                              funnel - nvvideoconvert - capsfilter - nvmultistreamtiler - nvvideoconvert - nvosd - nveglglessink
+                       |                                                                 |
+                       └ queue - valve --------------------------------------------------┘
 
 
 ## Run project
