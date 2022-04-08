@@ -4,6 +4,15 @@ This project uses deepstream 6.0.1 running on a docker compose with mqtt from mo
 the projcet is develop in python and reads messages from mqqt to pause, play or stop 
 the pipeline as well as to send images from pipeline or messages
 
+
+
+                       ┌ queue - valve - nvinfer ┐ 
+                       |                         |
+    src - streammux - tee                      funnel - nvvideoconvert - capsfilter - nvmultistreamtiler - nvvideoconvert - nvosd - nveglglessink
+                       |                         |
+                       └ queue - valve ----------┘
+
+
 ## Run project
 
 To run the project you need to create a deepstream.env file with below keys.
