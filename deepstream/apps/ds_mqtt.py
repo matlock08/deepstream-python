@@ -19,6 +19,7 @@ import utils.pipeline_builder as pb
 import utils.bus_call as bc
 import utils.mqtt_handler as mh
 import utils.image_probe as ip
+import utils.message_probe as mp
 
 
 def main(args):
@@ -27,7 +28,7 @@ def main(args):
     
     # Using utility class to build the pipeline
     pipe = pb.PipelineBuilder(sources)
-    pipeline = pipe.build(True , ip.tiler_sink_pad_buffer_probe )
+    pipeline = pipe.build(True , mp.tiler_sink_pad_buffer_probe )
     #pipeline = pipe.build()
     
     # create an event loop and feed gstreamer bus mesages to it
