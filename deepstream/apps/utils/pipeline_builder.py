@@ -2,7 +2,7 @@
     
                                  l-- queue -- valve --nvinfer --| 
                                  l                              |
-    camera srcs -- streammux -- tee                           funnel -- nvmultistreamtiler -- queue -- nvvideoconvert --queue -- nvosd -- queue -- nveglglessink
+    camera srcs -- streammux -- tee                           funnel -- nvvideoconvert -- capsfilter -- nvmultistreamtiler -- nvvideoconvert -- nvosd -- nveglglessink
                                  l                              |
                                  l-- queue -- valve ------------|
 
@@ -31,6 +31,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import GObject, Gst
 import math
 import logging
+import pyds
 
 logger = logging.getLogger('ds')
 
@@ -52,6 +53,7 @@ class PipelineBuilder:
         self.OSD_PROCESS_MODE = 0
         self.OSD_DISPLAY_TEXT = 0
         self.sources = sources
+        self.mem_type = int(pyds.NVBUF_MEM_CUDA_UNIFIED)
         
 
     def build(self, displaySync : bool = True, probeCallback : any = None):
@@ -102,6 +104,7 @@ class PipelineBuilder:
         streammux.set_property('batch-size', len(self.sources))
         streammux.set_property('batched-push-timeout', 4000000)
         streammux.set_property('live-source', 1)
+        streammux.set_property("nvbuf-memory-type", self.mem_type)
 
         if not streammux:
             raise Exception("Unable to create NvStreamMux")
@@ -222,10 +225,25 @@ class PipelineBuilder:
             raise Exception("Unable to create funnel")
         
 
+        logger.debug("Creating nvvideoconvert")
+        nvvidconv1 = Gst.ElementFactory.make("nvvideoconvert", "convertor1")
+        if not nvvidconv1:
+            raise Exception("Unable to create nvvideoconvert1")
+        nvvidconv1.set_property("nvbuf-memory-type", self.mem_type)
+
+        logger.debug("Creating caps")
+        caps1 = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=RGBA")
+        filter1 = Gst.ElementFactory.make("capsfilter", "filter1")
+        if not filter1 or not caps1:
+            raise Exception("Unable to create caps filter")
+
+        filter1.set_property("caps", caps1)
+
         logger.debug("Creating tiler")
         tiler = Gst.ElementFactory.make("nvmultistreamtiler", "nvtiler")
         if not tiler:
             raise Exception("Unable to create tiler")
+        tiler.set_property("nvbuf-memory-type", self.mem_type)
 
         tiler_rows = int(math.sqrt(len(self.sources)))
         tiler_columns = int(math.ceil((1.0*len(self.sources))/tiler_rows))
@@ -233,30 +251,12 @@ class PipelineBuilder:
         tiler.set_property("columns",tiler_columns)
         tiler.set_property("width", self.TILED_OUTPUT_WIDTH)
         tiler.set_property("height", self.TILED_OUTPUT_HEIGHT)
-            
 
         logger.debug("Creating nvvideoconvert")
         nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "convertor")
         if not nvvidconv:
-            raise Exception("Unable to create nvvideoconvert")
-
-        logger.debug("Creating nvvideoconvert2")
-        nvvidconv2 = Gst.ElementFactory.make("nvvideoconvert", "convertor2")
-        if not nvvidconv2:
             raise Exception("Unable to create nvvidconv2")
-            
-        logger.debug("Creating caps")
-        caps1 = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=RGBA")
-        if not caps1:
-            raise Exception("Unable to create caps1")
-
-        logger.debug("Creating capsfilter")
-        filter1 = Gst.ElementFactory.make("capsfilter", "filter1")
-        if not filter1:
-            raise Exception("Unable to create capsfilter")
-
-        filter1.set_property("caps", caps1)
-
+        nvvidconv.set_property("nvbuf-memory-type", self.mem_type) 
 
         logger.debug("Creating nvosd")
         nvosd = Gst.ElementFactory.make("nvdsosd", "onscreendisplay")
@@ -279,36 +279,27 @@ class PipelineBuilder:
             sink.set_property("sync",0)
             sink.set_property("qos",0)
 
-
-        queueTiler = Gst.ElementFactory.make("queue","queueTiler")
-        queueConverter = Gst.ElementFactory.make("queue","queueConverter")
-        queueOSD = Gst.ElementFactory.make("queue","queueOSD")
         
         logger.debug("Adding elements to Pipeline")
         pipeline.add(funnel)  
-        pipeline.add(nvvidconv2)     
-        pipeline.add(filter1)
         pipeline.add(tiler)
-        pipeline.add(queueTiler)
-        pipeline.add(nvvidconv)        
-        pipeline.add(queueConverter)
+        pipeline.add(nvvidconv)     
+        pipeline.add(filter1)
+        pipeline.add(nvvidconv1)         
         pipeline.add(nvosd)
-        pipeline.add(queueOSD)
         pipeline.add(sink)
 
 
         logger.debug("Linking elements of Pipeline")
         endFlow1.link(funnel)
         endFlow2.link(funnel)
-        funnel.link(nvvidconv2)
-        nvvidconv2.link(filter1)
+        funnel.link(nvvidconv1)
+        nvvidconv1.link(filter1)
         filter1.link(tiler)        
-        tiler.link(queueTiler)
-        queueTiler.link(nvvidconv)
-        nvvidconv.link(queueConverter)
-        queueConverter.link(nvosd)
-        nvosd.link(queueOSD)
-        queueOSD.link(sink) 
+        tiler.link(nvvidconv)
+        nvvidconv.link(nvosd)
+        nvosd.link(sink) 
+        
 
         if probeCallback:
             # Add Probe to get access to image from the pipeline
@@ -364,6 +355,10 @@ class PipelineBuilder:
         logger.debug("Decodebin child added: %s", name)
         if(name.find("decodebin") != -1):
             Object.connect("child-added",self.decodebin_child_added,user_data)
+
+        if "source" in name:
+            Object.set_property("drop-on-latency", True)
+
 
     def create_source_bin(self, index, uri):
         """

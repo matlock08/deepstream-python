@@ -27,13 +27,13 @@ saved_count["stream_1"] = 0
 # tiler_sink_pad_buffer_probe  will extract metadata received on tiler src pad
 # and update params for drawing rectangle, object information etc.
 def tiler_sink_pad_buffer_probe( pad, info, u_data):
-    logging.info("tiler_sink_pad_buffer_probe")
+    logger.debug("tiler_sink_pad_buffer_probe")
 
     frame_number = 0
     num_rects = 0
     gst_buffer = info.get_buffer()
     if not gst_buffer:
-        print("Unable to get GstBuffer ")
+        logger.error("Unable to get GstBuffer ")
         return
 
     # Retrieve batch metadata from the gst_buffer
@@ -75,22 +75,22 @@ def tiler_sink_pad_buffer_probe( pad, info, u_data):
             # Periodically check for objects with borderline confidence value that may be false positive detections.
             # If such detections are found, annotate the frame with bboxes and confidence value.
             # Save the annotated frame to file.
-            print(obj_meta.confidence)
+            
             if saved_count["stream_{}".format(frame_meta.pad_index)] % 30 == 0 and (
                     MIN_CONFIDENCE < obj_meta.confidence < MAX_CONFIDENCE):
                 if is_first_obj:
                     is_first_obj = False
 
                     # TODO Checa aqui por que truna al acar la imagen
-
+                    logger.info("Class: %s Confidence: %f " ,pgie_classes_str[obj_meta.class_id],obj_meta.confidence)
                     # Getting Image data using nvbufsurface
                     # the input should be address of buffer and batch_id
                     n_frame = pyds.get_nvds_buf_surface(hash(gst_buffer), frame_meta.batch_id)
                     n_frame = draw_bounding_boxes(n_frame, obj_meta, obj_meta.confidence)
                     # convert python array into numpy array format in the copy mode.
-                    #frame_copy = np.array(n_frame, copy=True, order='C')
+                    frame_copy = np.array(n_frame, copy=True, order='C')
                     # convert the array into cv2 default color format
-                    #frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_RGBA2BGRA)
+                    frame_copy = cv2.cvtColor(frame_copy, cv2.COLOR_RGBA2BGRA)
 
 
                 save_image = True
@@ -100,15 +100,15 @@ def tiler_sink_pad_buffer_probe( pad, info, u_data):
             except StopIteration:
                 break
 
-        print("Source=", frame_meta.pad_index, "Frame Number=", frame_number, "Number of Objects=", num_rects, "Vehicle_count=",
-              obj_counter[PGIE_CLASS_ID_VEHICLE], "Person_count=", obj_counter[PGIE_CLASS_ID_PERSON])
+        #print("Source=", frame_meta.pad_index, "Frame Number=", frame_number, "Number of Objects=", num_rects, "Vehicle_count=",
+        #      obj_counter[PGIE_CLASS_ID_VEHICLE], "Person_count=", obj_counter[PGIE_CLASS_ID_PERSON])
         
         
         if save_image:
             img_path = "{}/stream_{}/frame_{}.jpg".format('/opt/nvidia/deepstream/deepstream/sources/python/apps', frame_meta.pad_index, frame_number)
-            print("Saving image to {}".format(img_path))
+            logger.debug("Saving image to {}".format(img_path))
             if not cv2.imwrite(img_path, frame_copy):
-                print("Failed to save image")
+                logger.error("Failed to save image {}".format(img_path))
         saved_count["stream_{}".format(frame_meta.pad_index)] += 1
         
         try:
