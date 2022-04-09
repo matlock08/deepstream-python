@@ -6,8 +6,6 @@ import os
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import GObject, Gst
-import random
-from paho.mqtt import client as mqtt_client
 
 import logging
 import logging.config
@@ -28,8 +26,14 @@ def main(args):
     
     # Using utility class to build the pipeline
     pipe = pb.PipelineBuilder(sources)
-    pipeline = pipe.build(True , mp.tiler_sink_pad_buffer_probe )
     #pipeline = pipe.build()
+    #pipeline = pipe.build(True , ip.tiler_sink_pad_buffer_probe ) # Save image every 30 frames 
+    pipeline = pipe.build(True , mp.tiler_sink_pad_buffer_probe ) # Send json message every 30 frames
+    
+    # MQTT Handler
+    mqttHandler = mh.MQTTHandler(pipeline)    
+    mqttClient = mqttHandler.connect_mqtt()
+    mqttHandler.subscribe(mqttClient)
     
     # create an event loop and feed gstreamer bus mesages to it
     loop = GObject.MainLoop()
@@ -43,11 +47,7 @@ def main(args):
     pipeline.set_state(Gst.State.PLAYING)
     logger.info("Started pipeline...")
 
-    # Start MQTT client
-    mqttHandler = mh.MQTTHandler(pipeline)
-    
-    mqttClient = mqttHandler.connect_mqtt()
-    mqttHandler.subscribe(mqttClient)
+    # Start MQTT client    
     mqttClient.loop_start()
 
     try:

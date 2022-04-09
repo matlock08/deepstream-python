@@ -39,21 +39,32 @@ logger = logging.getLogger('ds')
 
 class PipelineBuilder:
     
-    def __init__(self, sources , TILED_OUTPUT_WIDTH : int = 1280, TILED_OUTPUT_HEIGHT : int = 720, PGIE_CONFIG_FILE :str = "dstest_pgie_config.txt"):
+    def __init__(self, sources , 
+                    TILED_OUTPUT_WIDTH : int = 1280, 
+                    TILED_OUTPUT_HEIGHT : int = 720, 
+                    PGIE_CONFIG_FILE :str = "config/pgie_config.txt",
+                    SGIE1_CONFIG_FILE = "config/sgie1_config.txt",
+                    SGIE2_CONFIG_FILE = "config/sgie2_config.txt",
+                    SGIE3_CONFIG_FILE = "config/sgie3_config.txt",
+                    TRACKER_CONFIG = "config/tracker_config.txt"):
         """
         Initializes the builder
         Arguments:
             sources: str[] - String array of rtsp uri of cameras
             TILED_OUTPUT_WIDTH: int - Tiled width (default: 1280)
             TILED_OUTPUT_HEIGHT: int - Tiled heaight (default: 720)
-            PGIE_CONFIG_FILE: str - Configuration file for pgie (default dstest_pgie_config.txt)
+            PGIE_CONFIG_FILE: str - Configuration file for pgie (default config/pgie_config.txt)
+            SGIE1_CONFIG_FILE: str - Configuration file for sgie1 (default config/sgie1_config.txt)
+            SGIE2_CONFIG_FILE: str - Configuration file for sgie2 (default config/sgie2_config.txt)
+            SGIE3_CONFIG_FILE: str - Configuration file for sgie3 (default config/sgie3_config.txt)
+            TRACKER_CONFIG: str - Configuration file for tracker (default config/tracker_config.txt)
         """
         self.inferenceEnabled = True
-        self.PGIE_CONFIG_FILE = PGIE_CONFIG_FILE
-        self.TRACKER_CONFIG = "dstest_tracker_config.txt"
-        self.SGIE1_CONFIG_FILE = "dstest_sgie1_config.txt"
-        self.SGIE2_CONFIG_FILE = "dstest_sgie2_config.txt"
-        self.SGIE3_CONFIG_FILE = "dstest_sgie3_config.txt"
+        self.PGIE_CONFIG_FILE = PGIE_CONFIG_FILE        
+        self.SGIE1_CONFIG_FILE = SGIE1_CONFIG_FILE
+        self.SGIE2_CONFIG_FILE = SGIE2_CONFIG_FILE
+        self.SGIE3_CONFIG_FILE = SGIE3_CONFIG_FILE
+        self.TRACKER_CONFIG = TRACKER_CONFIG
         self.TILED_OUTPUT_WIDTH = TILED_OUTPUT_WIDTH
         self.TILED_OUTPUT_HEIGHT = TILED_OUTPUT_HEIGHT
         self.OSD_PROCESS_MODE = 0
@@ -65,6 +76,9 @@ class PipelineBuilder:
     def build(self, displaySync : bool = True, probeCallback : any = None):
         """
         Creates the pipeline elements from the sources
+        Arguments:
+            displaySync: bool - If true, displays the pipeline
+            probeCallback: any - Callback to be called for image or message processing
         Returns:
             pipeline: GstPipeline  
         """
