@@ -22,6 +22,10 @@ To run the project you need to create a deepstream.env file with below keys.
 STREAMS is an array of sources rtsp or files
 
 ```
+MQTT_BROKER=mqtt
+MQTT_PORT=1883
+MQTT_TOPIC_COMMAND=/deepstream/command
+MQTT_TOPIC_MESSAGES=/deepstream/message
 STREAMS="rtsp://url:port/ rtsp://url:port"
 PYTHONUNBUFFERED=1
 ```
