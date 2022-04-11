@@ -24,10 +24,14 @@ import utils.message_probe as mp
 def main(args):
     # Get sources from ENV Variable from Docker
     sources = os.environ.get("STREAMS").split(" ")
+    mqtt_broker = os.environ.get("MQTT_BROKER")
+    mqtt_port = int(os.environ.get("MQTT_PORT"))
+    mqtt_topic_command = os.environ.get("MQTT_TOPIC_COMMAND") 
+    mqtt_topic_messages = os.environ.get("MQTT_TOPIC_MESSAGES") 
 
-    # MQTT Message Callback
+    #MQTT Message Callback
     def on_mqtt_message(client, userdata, msg):
-        nonlocal pipeline
+        nonlocal pipeline, valveInfer, valveNotInfer
         logger.debug(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
         data = json.loads(msg.payload.decode())
 
@@ -41,23 +45,28 @@ def main(args):
 
         if 'inference' in data:
             if data['inference'] == 'enable':
-                enabledInference = True
+                valveInfer.set_property("drop", False)
+                valveNotInfer.set_property("drop", True)
             elif data['inference'] == 'disable':
-                enabledInference = False
+                valveInfer.set_property("drop", True)
+                valveNotInfer.set_property("drop", False)
 
     # MQTT Handler   
-    mqttHandler = mh.MQTTHandler()    
+    mqttHandler = mh.MQTTHandler(mqtt_broker, mqtt_port, mqtt_topic_command)    
     mqttClient = mqttHandler.connect_mqtt(on_mqtt_message)
     
-    # Using utility class to build the pipeline
+    # Utility class to build the pipeline
     pipe = pb.PipelineBuilder(sources)
-    #pipeline = pipe.build()
+    # Visualize true and no probe
+    #pipeline = pipe.build() # Default pipeline visualize true no probe 
     
-    #ipi = ip.ImageProbe()
-    #pipeline = pipe.build(True , ip.tiler_sink_pad_buffer_probe.__func__ ) # Save image every 30 frames __func__ to access method directly
+    # Sample probe Visualize true and Save image every 30 frames
+    #ipi = ip.ImageProbe('/tmp')
+    #pipeline, valveInfer, valveNotInfer = pipe.build(True , ipi.process_buffer_probe )  
 
-    mpi = mp.MessageProbe(mqttClient)
-    pipeline = pipe.build(True , mpi.process_buffer_probe ) # Send json message every 30 frames 
+    # Sample probe Visualize true and Send json message every 30 frames 
+    mpi = mp.MessageProbe(mqttClient, mqtt_topic_messages)
+    pipeline, valveInfer, valveNotInfer = pipe.build(True , mpi.process_buffer_probe ) 
         
     # create an event loop and feed gstreamer bus mesages to it
     loop = GObject.MainLoop()

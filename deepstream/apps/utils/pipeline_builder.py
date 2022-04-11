@@ -18,7 +18,15 @@
     TILED_OUTPUT_HEIGHT : str
         Tiled heaight (default: '720')
     PGIE_CONFIG_FILE : str
-        Configuration file for pgie (default dstest_pgie_config.txt)
+        Configuration file for pgie (default config/pgie_config.txt)
+    SGIE1_CONFIG_FILE : str
+        Configuration file for sgie1 (default config/sgie1_config.txt)
+    SGIE2_CONFIG_FILE : str
+        Configuration file for sgie1 (default config/sgie2_config.txt)
+    SGIE3_CONFIG_FILE : str
+        Configuration file for sgie1 (default config/sgie3_config.txt)
+    TRACKER_CONFIG : str
+        Configuration file for sgie1 (default config/tracker_config.txt)
 
     Methods
     -------
@@ -71,6 +79,9 @@ class PipelineBuilder:
         self.OSD_DISPLAY_TEXT = 0
         self.sources = sources
         self.mem_type = int(pyds.NVBUF_MEM_CUDA_UNIFIED)
+        self.pipeline = None
+        self.valveInfer = None
+        self.valveNotInfer = None
         
 
     def build(self, displaySync : bool = True, probeCallback : any = None):
@@ -92,7 +103,7 @@ class PipelineBuilder:
         pipeline = self.build_pipeline_sync(pipeline, displaySync, pgie, valveNotInfer, probeCallback)
 
         logger.info("Builded Pipeline...")
-        return pipeline
+        return self.pipeline, self.valveInfer, self.valveNotInfer
 
     def build_pipeline_source(self):
         """
@@ -110,9 +121,9 @@ class PipelineBuilder:
         
 
         logger.debug("Creating Pipeline")
-        pipeline = Gst.Pipeline()
+        self.pipeline = Gst.Pipeline()
         
-        if not pipeline:
+        if not self.pipeline:
             raise Exception("Unable to create Pipeline")
 
         is_live = False    
@@ -129,7 +140,7 @@ class PipelineBuilder:
         if not streammux:
             raise Exception("Unable to create NvStreamMux")
 
-        pipeline.add(streammux)
+        self.pipeline.add(streammux)
 
         for i in range(len(self.sources)):
             logger.debug("Creating source_bin %d", i)
@@ -140,7 +151,7 @@ class PipelineBuilder:
             if not source_bin:
                 raise Exception("Unable to create source bin")
 
-            pipeline.add(source_bin)
+            self.pipeline.add(source_bin)
             padname = "sink_%u" %i
             sinkpad = streammux.get_request_pad(padname) 
             if not sinkpad:
@@ -152,7 +163,7 @@ class PipelineBuilder:
 
             srcpad.link(sinkpad)
         
-        return pipeline, streammux
+        return self.pipeline, streammux
 
 
     def build_pipeline_flows(self, pipeline, streammux):
@@ -239,26 +250,26 @@ class PipelineBuilder:
         if not queueWithoutInference:
             raise Exception("Unable to create queueWithoutInference")
 
-        logger.debug("Creating valveInfer")
-        valveInfer = Gst.ElementFactory.make("valve", "valveInfer")
-        if not valveInfer:
+        logger.debug("Creating valveInfer")        
+        self.valveInfer = Gst.ElementFactory.make("valve", "valveInfer")
+        if not self.valveInfer:
             raise Exception("Unable to create valveInfer")
 
-        valveInfer.set_property("drop", not self.inferenceEnabled)
+        self.valveInfer.set_property("drop", not self.inferenceEnabled)
 
 
         logger.debug("Creating valveNotInfer")
-        valveNotInfer = Gst.ElementFactory.make("valve", "valveNotInfer")
-        if not valveNotInfer:
+        self.valveNotInfer = Gst.ElementFactory.make("valve", "valveNotInfer")
+        if not self.valveNotInfer:
             raise Exception("Unable to create valveNotInfer")
 
-        valveNotInfer.set_property("drop", self.inferenceEnabled )
+        self.valveNotInfer.set_property("drop", self.inferenceEnabled )
         
 
         logger.debug("Adding elements to Pipeline")
         pipeline.add(tee)
         pipeline.add(queueInference)        
-        pipeline.add(valveInfer)
+        pipeline.add(self.valveInfer)
         pipeline.add(pgie)
         pipeline.add(tracker)
         pipeline.add(sgie1)
@@ -267,7 +278,7 @@ class PipelineBuilder:
 
 
         pipeline.add(queueWithoutInference)
-        pipeline.add(valveNotInfer)
+        pipeline.add(self.valveNotInfer)
 
 
         logger.debug("Linking elements of Pipeline")
@@ -275,16 +286,16 @@ class PipelineBuilder:
         tee.link(queueInference)
         tee.link(queueWithoutInference)
 
-        queueInference.link(valveInfer)
-        valveInfer.link(pgie)
+        queueInference.link(self.valveInfer)
+        self.valveInfer.link(pgie)
         pgie.link(tracker)
         tracker.link(sgie1)
         sgie1.link(sgie2)
         sgie2.link(sgie3)
 
-        queueWithoutInference.link(valveNotInfer)
+        queueWithoutInference.link(self.valveNotInfer)
         
-        return pipeline, sgie3, valveNotInfer
+        return pipeline, sgie3, self.valveNotInfer
 
 
     def build_pipeline_sync(self, pipeline, displaySync,  endFlow1, endFlow2, probeCallback ):

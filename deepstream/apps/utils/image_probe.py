@@ -10,29 +10,30 @@ import os.path
 
 logger = logging.getLogger('ds')
 
-saved_count = {}
-
 PGIE_CLASS_ID_VEHICLE = 0
 PGIE_CLASS_ID_BICYCLE = 1
 PGIE_CLASS_ID_PERSON = 2
 PGIE_CLASS_ID_ROADSIGN = 3
 
-pgie_classes_str = ["Vehicle", "TwoWheeler", "Person", "RoadSign"]
-MIN_CONFIDENCE = 0.2
+MIN_CONFIDENCE = 0.5
 MAX_CONFIDENCE = 1.0
 
+saved_count = {}
 saved_count["stream_0"] = 0
 saved_count["stream_1"] = 0
 
 class ImageProbe:
 
-    def __init__(self):
-        pass
+    def __init__(self, base_dir):
+        self.base_dir = base_dir
+        os.mkdir(os.path.join(self.base_dir, 'stream_0'))
+        os.mkdir(os.path.join(self.base_dir, 'stream_1'))
+
 
     # tiler_sink_pad_buffer_probe  will extract metadata received on tiler src pad
     # and update params for drawing rectangle, object information etc.
-    def tiler_sink_pad_buffer_probe( pad, info, u_data):
-        logger.debug("tiler_sink_pad_buffer_probe")
+    def process_buffer_probe(self, pad, info, u_data):
+        logger.debug("process_buffer_probe")
 
         frame_number = 0
         num_rects = 0
@@ -86,12 +87,12 @@ class ImageProbe:
                     if is_first_obj:
                         is_first_obj = False
 
-                        # TODO Checa aqui por que truna al acar la imagen
-                        logger.info("Class: %s Confidence: %f " ,pgie_classes_str[obj_meta.class_id],obj_meta.confidence)
+                        logger.debug("Class: %s Confidence: %f " ,obj_meta.obj_label, obj_meta.confidence)
+                        
                         # Getting Image data using nvbufsurface
                         # the input should be address of buffer and batch_id
                         n_frame = pyds.get_nvds_buf_surface(hash(gst_buffer), frame_meta.batch_id)
-                        n_frame = draw_bounding_boxes(n_frame, obj_meta, obj_meta.confidence)
+                        n_frame = self.draw_bounding_boxes(n_frame, obj_meta, obj_meta.confidence)
                         # convert python array into numpy array format in the copy mode.
                         frame_copy = np.array(n_frame, copy=True, order='C')
                         # convert the array into cv2 default color format
@@ -110,7 +111,7 @@ class ImageProbe:
             
             
             if save_image:
-                img_path = "{}/stream_{}/frame_{}.jpg".format('/opt/nvidia/deepstream/deepstream/sources/python/apps', frame_meta.pad_index, frame_number)
+                img_path = "{}/stream_{}/frame_{}.jpg".format( self.base_dir , frame_meta.pad_index, frame_number)
                 logger.debug("Saving image to {}".format(img_path))
                 if not cv2.imwrite(img_path, frame_copy):
                     logger.error("Failed to save image {}".format(img_path))
@@ -124,14 +125,14 @@ class ImageProbe:
         return Gst.PadProbeReturn.OK
 
 
-    def draw_bounding_boxes(image, obj_meta, confidence):
+    def draw_bounding_boxes(self, image, obj_meta, confidence):
         confidence = '{0:.2f}'.format(confidence)
         rect_params = obj_meta.rect_params
         top = int(rect_params.top)
         left = int(rect_params.left)
         width = int(rect_params.width)
         height = int(rect_params.height)
-        obj_name = pgie_classes_str[obj_meta.class_id]
+        obj_name = obj_meta.obj_label
         # image = cv2.rectangle(image, (left, top), (left + width, top + height), (0, 0, 255, 0), 2, cv2.LINE_4)
         color = (0, 0, 255, 0)
         w_percents = int(width * 0.05) if width > 100 else int(width * 0.1)

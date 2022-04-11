@@ -9,9 +9,9 @@ logger = logging.getLogger('ds')
 
 class MessageProbe:
 
-    def __init__(self, mqtt_client):
+    def __init__(self, mqtt_client, mqtt_topic):
         self.mqtt_client = mqtt_client
-        
+        self.mqtt_topic = mqtt_topic        
 
 
     def process_buffer_probe(self, pad, info, u_data):
@@ -92,10 +92,10 @@ class MessageProbe:
                 break
 
         # All the Frames, containing, all their objects , all their attributes
-        if frame_number % 30 == 0:
-            logger.info( json.dumps(objects_classes_msg) )
+        #if frame_number % 30 == 0 and len(objects_classes_msg) > 0:
+        #    logger.info( json.dumps(objects_classes_msg) )
             
         if frame_number % 30 == 0 and self.mqtt_client and len(objects_classes_msg) > 0:
-            self.mqtt_client.publish('/deepstream/message', json.dumps(objects_classes_msg))
+            self.mqtt_client.publish(self.mqtt_topic, json.dumps(objects_classes_msg))
 
         return Gst.PadProbeReturn.OK
