@@ -21,8 +21,6 @@ import utils.image_probe as ip
 import utils.message_probe as mp
 
 
-
-
 def main(args):
     # Get sources from ENV Variable from Docker
     sources = os.environ.get("STREAMS").split(" ")
@@ -70,7 +68,6 @@ def main(args):
     # Sample probe Visualize true and Send json message every 30 frames 
     add_probe(pipeline, mp.MessageProbe(mqttClient, mqtt_topic_messages).process_buffer_probe )
 
-    logger.info( "tiler %s", Gst.Bin.get_by_name(pipeline, "nvtiler") ) 
         
     # create an event loop and feed gstreamer bus mesages to it
     loop = GObject.MainLoop()
