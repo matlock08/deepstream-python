@@ -27,6 +27,7 @@ MQTT_PORT=1883
 MQTT_TOPIC_COMMAND=/deepstream/command
 MQTT_TOPIC_MESSAGES=/deepstream/message
 STREAMS="rtsp://url:port/ rtsp://url:port"
+SHOW_ON_SCREEN=1
 PYTHONUNBUFFERED=1
 ```
 
