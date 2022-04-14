@@ -4,6 +4,8 @@ This project uses deepstream 6.0.1 running on a docker compose environment with 
 the project is developed in python and reads messages from mqtt to pause, play or stop 
 the pipeline as well as to disable or enable inference.
 
+To run this you need an Ubuntu 18.04, as well as an Nvidia CUDA 11.1 capable card.
+
 Also support to add probe callback to get access to images in pipeline or to send messages
 
 
